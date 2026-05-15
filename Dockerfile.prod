@@ -31,15 +31,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
-COPY requirements.txt .
+# Use the slim production deps file — no torch, no sentence-transformers
+# (embeddings go to OpenAI's API), no dev tools (ruff/mypy/pytest).
+# Saves ~2 GB during build and in the final image, which lets CloudShell
+# build it without running out of disk.
+COPY requirements-prod.txt .
 RUN python -m venv /opt/venv \
     && /opt/venv/bin/pip install --upgrade pip wheel \
-    && /opt/venv/bin/pip install \
-         --index-url https://download.pytorch.org/whl/cpu \
-         --extra-index-url https://pypi.org/simple \
-         torch==2.5.1 \
-    && /opt/venv/bin/pip install -r requirements.txt \
-    && /opt/venv/bin/pip install boto3==1.35.86
+    && /opt/venv/bin/pip install -r requirements-prod.txt
 
 # ── Stage 3 — runtime ────────────────────────────────────────────
 FROM python:3.11-slim AS runtime

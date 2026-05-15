@@ -102,6 +102,15 @@ def _enforce_production_invariants(settings: Settings) -> None:
         problems.append("APP_SECRET_KEY must be set to a real secret in production")
     if settings.jwt_secret.get_secret_value() in {"", "change-me-to-a-different-long-random-string"}:
         problems.append("JWT_SECRET must be set to a real secret in production")
+    # Production image is slim — sentence-transformers/torch aren't installed.
+    # OpenAI is the only supported embedding provider in prod.
+    if settings.embedding_provider != "openai":
+        problems.append(
+            "EMBEDDING_PROVIDER must be 'openai' in production "
+            "(the slim prod image doesn't ship sentence-transformers)"
+        )
+    if not settings.openai_api_key.get_secret_value():
+        problems.append("OPENAI_API_KEY must be set in production")
     if problems:
         raise RuntimeError("Refusing to start: " + "; ".join(problems))
 
