@@ -1,0 +1,53 @@
+# ── Python ──────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+.Python
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+
+# ── Secrets / Env ───────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── RAG artifacts (never committed) ─────────────────────────────
+*.faiss
+*.pkl
+faiss_store/*
+!faiss_store/.gitkeep
+
+# ── Uploaded knowledge files ────────────────────────────────────
+uploads/*
+!uploads/.gitkeep
+
+# ── Node / Frontend ─────────────────────────────────────────────
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.local
+
+# ── IDE / OS ────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ── Docker volumes ──────────────────────────────────────────────
+postgres-data/
+redis-data/
+
+# ── Logs ────────────────────────────────────────────────────────
+*.log
+logs/

@@ -1,0 +1,85 @@
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap");
+@import "./tokens.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    font-family: "Inter", system-ui, sans-serif;
+    font-size: 1rem;
+    line-height: 1.6;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: "Poppins", "Inter", system-ui, sans-serif;
+    letter-spacing: -0.01em;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: theme("colors.gray.300") transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: theme("colors.gray.300");
+    border-radius: 9999px;
+  }
+
+  /* Animated soft mesh-gradient blobs — used by the login page. */
+  .mesh-blob {
+    position: absolute;
+    border-radius: 9999px;
+    filter: blur(80px);
+    opacity: 0.55;
+    will-change: transform;
+  }
+  .mesh-blob-1 {
+    width: 38rem;
+    height: 38rem;
+    background: #14B4DC;
+    top: -8rem;
+    left: -8rem;
+    animation: mesh-float-1 18s ease-in-out infinite;
+  }
+  .mesh-blob-2 {
+    width: 34rem;
+    height: 34rem;
+    background: #2850DC;
+    bottom: -10rem;
+    right: -6rem;
+    opacity: 0.35;
+    animation: mesh-float-2 22s ease-in-out infinite;
+  }
+  .mesh-blob-3 {
+    width: 28rem;
+    height: 28rem;
+    background: #C7D2FE;
+    top: 40%;
+    right: 15%;
+    opacity: 0.6;
+    animation: mesh-float-3 26s ease-in-out infinite;
+  }
+}
+
+@keyframes mesh-float-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(6rem, 4rem) scale(1.08); }
+}
+@keyframes mesh-float-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-5rem, -3rem) scale(1.05); }
+}
+@keyframes mesh-float-3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(-3rem, 4rem) scale(0.95); }
+  66% { transform: translate(3rem, -2rem) scale(1.08); }
+}

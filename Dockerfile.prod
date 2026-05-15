@@ -1,0 +1,81 @@
+# syntax=docker/dockerfile:1.7
+# ═════════════════════════════════════════════════════════════════
+# Production image for AWS App Runner.
+#
+# Single container: FastAPI on uvicorn serves both /api/* (backend) and
+# the React SPA static bundle at /. No nginx needed — App Runner handles
+# HTTPS termination and routing. One process model, simplest possible.
+# ═════════════════════════════════════════════════════════════════
+
+# ── Stage 1 — build the React frontend ───────────────────────────
+FROM node:20-alpine AS frontend-builder
+WORKDIR /web
+
+# Corporate-proxy escape hatch (used at build time only)
+ARG NPM_STRICT_SSL=true
+RUN npm config set strict-ssl ${NPM_STRICT_SSL}
+
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm install --no-fund --no-audit --include=dev
+
+COPY frontend/ ./
+RUN npm run build
+# Produces /web/dist with index.html + assets/
+
+# ── Stage 2 — Python deps (CPU torch as in dev) ──────────────────
+FROM python:3.11-slim AS py-builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential gcc g++ libffi-dev libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+COPY requirements.txt .
+RUN python -m venv /opt/venv \
+    && /opt/venv/bin/pip install --upgrade pip wheel \
+    && /opt/venv/bin/pip install \
+         --index-url https://download.pytorch.org/whl/cpu \
+         --extra-index-url https://pypi.org/simple \
+         torch==2.5.1 \
+    && /opt/venv/bin/pip install -r requirements.txt \
+    && /opt/venv/bin/pip install boto3==1.35.86
+
+# ── Stage 3 — runtime ────────────────────────────────────────────
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    APP_ENV=production \
+    PORT=8000 \
+    HF_HOME=/tmp/huggingface \
+    TRANSFORMERS_CACHE=/tmp/huggingface
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libpq5 curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 1001 tripsafe \
+    && useradd --system --uid 1001 --gid tripsafe --home /app tripsafe
+
+COPY --from=py-builder /opt/venv /opt/venv
+
+WORKDIR /app
+COPY --chown=tripsafe:tripsafe app /app/app
+COPY --chown=tripsafe:tripsafe alembic.ini /app/alembic.ini
+COPY --chown=tripsafe:tripsafe scripts /app/scripts
+COPY --from=frontend-builder --chown=tripsafe:tripsafe /web/dist /app/frontend_dist
+
+RUN mkdir -p /app/uploads /app/faiss_store /tmp/huggingface \
+    && chown -R tripsafe:tripsafe /app/uploads /app/faiss_store /tmp/huggingface
+
+USER tripsafe
+
+EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
+    CMD curl -fsS http://localhost:${PORT}/health || exit 1
+
+# Run migrations, then start gunicorn. Single worker — App Runner scales
+# horizontally by adding more container instances behind its load balancer.
+CMD ["sh", "-c", "alembic upgrade head && gunicorn -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:${PORT} --timeout 120 --access-logfile - --error-logfile - app.main:app"]

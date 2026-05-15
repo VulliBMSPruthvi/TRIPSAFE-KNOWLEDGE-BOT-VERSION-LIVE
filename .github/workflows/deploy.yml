@@ -1,0 +1,51 @@
+name: Deploy to AWS App Runner
+
+# Runs on every push to main. Builds the production image, pushes to ECR,
+# and App Runner picks it up automatically (auto-deploy must be enabled
+# on the App Runner service, which the runbook walks you through).
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write   # for OIDC to AWS — no long-lived keys
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+  ECR_REPO: tripsafe-kb-v2
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build, tag, and push image
+        env:
+          REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -f Dockerfile.prod \
+            -t $REGISTRY/$ECR_REPO:latest \
+            -t $REGISTRY/$ECR_REPO:$IMAGE_TAG \
+            .
+          docker push $REGISTRY/$ECR_REPO:latest
+          docker push $REGISTRY/$ECR_REPO:$IMAGE_TAG
+
+      - name: Trigger App Runner deployment
+        run: |
+          aws apprunner start-deployment \
+            --service-arn ${{ secrets.APP_RUNNER_SERVICE_ARN }}

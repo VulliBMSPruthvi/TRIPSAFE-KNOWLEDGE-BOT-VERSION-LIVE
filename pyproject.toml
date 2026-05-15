@@ -1,0 +1,35 @@
+[project]
+name = "tripsafe-kb-v2"
+version = "0.1.0"
+description = "TripSafe Knowledge Bot v2 — RAG chatbot with Claude + FAISS"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["app/db/migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "A", "RUF"]
+ignore = [
+    "E501",   # handled by formatter
+    "S101",   # assert ok in tests
+    "B008",   # FastAPI Depends() in defaults is idiomatic
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
+exclude = ["app/db/migrations/"]
+
+[[tool.mypy.overrides]]
+module = ["faiss.*", "sentence_transformers.*", "slowapi.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

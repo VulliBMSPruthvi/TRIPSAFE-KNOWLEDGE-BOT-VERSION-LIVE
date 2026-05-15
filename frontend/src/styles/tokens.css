@@ -1,0 +1,234 @@
+/* ============================================================
+   TripSafe Design System — Colors & Typography
+   ============================================================ */
+
+@font-face {
+  font-family: 'Inter';
+  src: url('../assets/fonts/Inter-VariableFont_opsz_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Inter';
+  src: url('../assets/fonts/Inter-Italic-VariableFont_opsz_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
+/* Poppins is imported once at the top of frontend/src/styles/globals.css */
+/* ── Color Tokens ─────────────────────────────────────────── */
+:root {
+
+  /* Brand Core */
+  --color-brand-blue:     #2850DC;
+  --color-brand-cyan:     #14B4DC;
+  --color-brand-navy:     #1A2A6C;
+
+  /* Brand Gradient */
+  --gradient-brand: linear-gradient(135deg, #14B4DC 0%, #2850DC 100%);
+  --gradient-brand-vertical: linear-gradient(180deg, #14B4DC 0%, #2850DC 100%);
+  --gradient-hero: linear-gradient(135deg, #1A2A6C 0%, #2850DC 60%, #14B4DC 100%);
+
+  /* Neutrals */
+  --color-white:          #FFFFFF;
+  --color-gray-50:        #F8FAFF;
+  --color-gray-100:       #EEF2FF;
+  --color-gray-200:       #E2E8F0;
+  --color-gray-300:       #CBD5E1;
+  --color-gray-400:       #94A3B8;
+  --color-gray-500:       #64748B;
+  --color-gray-600:       #475569;
+  --color-gray-700:       #334155;
+  --color-gray-800:       #1E293B;
+  --color-gray-900:       #0F172A;
+
+  /* Semantic Colors */
+  --color-success:        #10B981;
+  --color-success-light:  #D1FAE5;
+  --color-warning:        #F59E0B;
+  --color-warning-light:  #FEF3C7;
+  --color-danger:         #EF4444;
+  --color-danger-light:   #FEE2E2;
+  --color-info:           #14B4DC;
+  --color-info-light:     #E0F7FD;
+
+  /* Semantic Aliases */
+  --fg-primary:           var(--color-gray-900);
+  --fg-secondary:         var(--color-gray-500);
+  --fg-muted:             var(--color-gray-400);
+  --fg-inverse:           var(--color-white);
+  --fg-brand:             var(--color-brand-blue);
+
+  --bg-page:              var(--color-white);
+  --bg-surface:           var(--color-gray-50);
+  --bg-card:              var(--color-white);
+  --bg-tint:              var(--color-gray-100);
+  --bg-brand:             var(--color-brand-blue);
+  --bg-brand-gradient:    var(--gradient-brand);
+
+  --border-default:       var(--color-gray-200);
+  --border-strong:        var(--color-gray-300);
+  --border-brand:         var(--color-brand-blue);
+
+  /* ── Spacing Tokens ─────────────────────────────────────── */
+  --space-1:    4px;
+  --space-2:    8px;
+  --space-3:    12px;
+  --space-4:    16px;
+  --space-5:    20px;
+  --space-6:    24px;
+  --space-8:    32px;
+  --space-10:   40px;
+  --space-12:   48px;
+  --space-16:   64px;
+  --space-20:   80px;
+  --space-24:   96px;
+
+  /* ── Border Radius ──────────────────────────────────────── */
+  --radius-sm:   6px;
+  --radius-md:   10px;
+  --radius-lg:   16px;
+  --radius-xl:   24px;
+  --radius-full: 9999px;
+
+  /* ── Shadows ────────────────────────────────────────────── */
+  --shadow-sm:   0 1px 4px rgba(40, 80, 220, 0.07);
+  --shadow-md:   0 4px 16px rgba(40, 80, 220, 0.10);
+  --shadow-lg:   0 8px 32px rgba(40, 80, 220, 0.14);
+  --shadow-xl:   0 16px 48px rgba(40, 80, 220, 0.18);
+  --shadow-btn:  0 2px 8px rgba(40, 80, 220, 0.25);
+
+  /* ── Typography Scale ───────────────────────────────────── */
+  --font-family:         'Inter', sans-serif;
+  --font-family-body:    'Inter', sans-serif;
+  --font-family-heading: 'Poppins', sans-serif;
+
+  /* Size scale */
+  --text-xs:    0.75rem;    /* 12px */
+  --text-sm:    0.875rem;   /* 14px */
+  --text-base:  1rem;       /* 16px */
+  --text-lg:    1.125rem;   /* 18px */
+  --text-xl:    1.25rem;    /* 20px */
+  --text-2xl:   1.5rem;     /* 24px */
+  --text-3xl:   1.875rem;   /* 30px */
+  --text-4xl:   2.25rem;    /* 36px */
+  --text-5xl:   3rem;       /* 48px */
+  --text-6xl:   3.75rem;    /* 60px */
+  --text-7xl:   4.5rem;     /* 72px */
+
+  /* Weight */
+  --font-light:     300;
+  --font-regular:   400;
+  --font-medium:    500;
+  --font-semibold:  600;
+  --font-bold:      700;
+  --font-extrabold: 800;
+  --font-black:     900;
+
+  /* Line height */
+  --leading-tight:   1.2;
+  --leading-snug:    1.35;
+  --leading-normal:  1.6;
+  --leading-relaxed: 1.75;
+
+  /* Transitions */
+  --transition-fast:   150ms ease;
+  --transition-base:   250ms ease;
+  --transition-slow:   400ms ease;
+}
+
+/* ── Semantic Element Styles ──────────────────────────────── */
+
+body {
+  font-family: var(--font-family-body);
+  font-size: var(--text-base);
+  font-weight: var(--font-regular);
+  color: var(--fg-primary);
+  background: var(--bg-page);
+  line-height: var(--leading-normal);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1 {
+  font-family: var(--font-family-heading);
+  font-size: var(--text-5xl);
+  font-weight: var(--font-semibold);
+  line-height: var(--leading-tight);
+  color: var(--fg-primary);
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  font-family: var(--font-family-heading);
+  font-size: var(--text-4xl);
+  font-weight: var(--font-semibold);
+  line-height: var(--leading-tight);
+  color: var(--fg-primary);
+  letter-spacing: -0.015em;
+}
+
+h3 {
+  font-family: var(--font-family-heading);
+  font-size: var(--text-3xl);
+  font-weight: var(--font-semibold);
+  line-height: var(--leading-snug);
+  color: var(--fg-primary);
+}
+
+h4 {
+  font-family: var(--font-family-heading);
+  font-size: var(--text-2xl);
+  font-weight: var(--font-regular);
+  line-height: var(--leading-snug);
+  color: var(--fg-primary);
+}
+
+h5 {
+  font-family: var(--font-family-heading);
+  font-size: var(--text-xl);
+  font-weight: var(--font-regular);
+  line-height: var(--leading-snug);
+  color: var(--fg-primary);
+}
+
+h6 {
+  font-family: var(--font-family-heading);
+  font-size: var(--text-lg);
+  font-weight: var(--font-regular);
+  line-height: var(--leading-snug);
+  color: var(--fg-secondary);
+}
+
+p {
+  font-size: var(--text-base);
+  font-weight: var(--font-regular);
+  line-height: var(--leading-normal);
+  color: var(--fg-primary);
+}
+
+small {
+  font-size: var(--text-sm);
+  color: var(--fg-secondary);
+}
+
+a {
+  color: var(--color-brand-blue);
+  text-decoration: none;
+  transition: opacity var(--transition-fast);
+}
+a:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+code {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 0.9em;
+  background: var(--bg-tint);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  color: var(--color-brand-blue);
+}
