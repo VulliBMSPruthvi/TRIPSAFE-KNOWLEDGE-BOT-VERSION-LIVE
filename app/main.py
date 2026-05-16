@@ -143,8 +143,12 @@ def create_app() -> FastAPI:
     )
 
     # ── Security headers middleware ───────────────────────────────────
-    # Swagger UI / ReDoc need to load JS+CSS from jsdelivr; we relax CSP for
-    # the docs paths only. Everything else gets the strict default-src 'none'.
+    # CSP is route-specific:
+    #   - /docs, /redoc, /openapi.json  → permissive for Swagger UI assets
+    #   - /api/*                         → strict (default-src 'none')
+    #   - everything else (SPA)          → allow self-served React bundle +
+    #                                      Google Fonts (Poppins) +
+    #                                      Google profile pictures
     DOCS_PATHS = {"/docs", "/redoc", "/openapi.json"}
 
     @app.middleware("http")
@@ -154,8 +158,8 @@ def create_app() -> FastAPI:
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
-        if request.url.path in DOCS_PATHS or request.url.path.startswith("/docs"):
-            # Permissive CSP for Swagger UI assets from jsdelivr CDN.
+        path = request.url.path
+        if path in DOCS_PATHS or path.startswith("/docs"):
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
                 "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
@@ -164,9 +168,21 @@ def create_app() -> FastAPI:
                 "connect-src 'self'; "
                 "frame-ancestors 'none'"
             )
-        else:
+        elif path.startswith("/api/"):
             response.headers["Content-Security-Policy"] = (
                 "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+            )
+        else:
+            # SPA: serve the React bundle + Google Fonts CSS/files + Google avatars.
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline'; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+                "font-src 'self' https://fonts.gstatic.com data:; "
+                "img-src 'self' data: https:; "
+                "connect-src 'self'; "
+                "frame-ancestors 'none'; "
+                "base-uri 'self'"
             )
         if settings.is_production:
             response.headers["Strict-Transport-Security"] = (
