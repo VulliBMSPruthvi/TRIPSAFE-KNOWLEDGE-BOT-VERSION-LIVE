@@ -36,11 +36,15 @@ from app.services.rag import engine as rag_engine
 logger = logging.getLogger("tripsafe.chat")
 router = APIRouter()
 
-HISTORY_TURNS = 10  # last N user+assistant messages forwarded as context
+HISTORY_TURNS = 20  # last N user+assistant messages forwarded as context
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are a knowledgeable TripSafe travel insurance assistant. "
-    "Answer accurately based on the provided context. Be professional and helpful."
+    "Answer accurately based on the provided knowledge-base context. "
+    "Also use the prior conversation history to interpret pronouns and "
+    "follow-up questions (e.g. when the user says 'it', 'that plan', "
+    "'tell me more', refer back to what was discussed earlier in this chat). "
+    "Be professional, concise, and helpful."
 )
 
 
