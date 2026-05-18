@@ -100,6 +100,26 @@ class RagEngine:
 
     @property
     def available(self) -> bool:
+        # Multi-worker safety: under gunicorn we run >1 worker process per
+        # container. A rebuild triggered from the admin panel only mutates
+        # ONE worker's in-memory state — the other workers still see the
+        # stale (or empty) singleton. We also pull fresh index files from S3
+        # at container start, but a worker that booted before the first
+        # rebuild has no files to load.
+        # Solution: if memory is empty, try a disk reload on the fly. The
+        # rebuild path (or s3_store.pull_to_local on another worker's boot)
+        # may have written files since we last looked.
+        if self._index is None or self._metadata is None:
+            # Best-effort: try S3 pull first so workers can pick up an index
+            # rebuilt by a sibling worker that pushed to S3.
+            try:
+                from app.services import s3_store
+
+                if s3_store.is_enabled():
+                    s3_store.pull_to_local()
+            except Exception:
+                logger.exception("s3_pull_on_demand_failed")
+            self.reload()
         return self._index is not None and self._metadata is not None
 
     @property
