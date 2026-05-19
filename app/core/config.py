@@ -30,8 +30,10 @@ class Settings(BaseSettings):
 
     # ── JWT ─────────────────────────────────────────────────────
     jwt_secret: SecretStr = Field(..., min_length=16)
-    jwt_access_token_minutes: int = 15
-    jwt_refresh_token_days: int = 7
+    # Long-lived access token so users aren't kicked out mid-day.
+    # Refresh token is even longer so closing the laptop overnight stays logged in.
+    jwt_access_token_minutes: int = 1440  # 24h
+    jwt_refresh_token_days: int = 30
     jwt_algorithm: str = "HS256"
 
     # ── Database ────────────────────────────────────────────────

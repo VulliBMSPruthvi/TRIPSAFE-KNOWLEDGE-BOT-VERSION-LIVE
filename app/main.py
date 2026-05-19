@@ -13,8 +13,10 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.types import ASGIApp, Receive, Scope, Send
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -132,6 +134,13 @@ def create_app() -> FastAPI:
     app.state.limiter = limiter
     app.state.settings = settings
 
+    # ── GZip: compresses JSON/HTML/JS/CSS responses ≥500 bytes ────────
+    # Cuts the React bundle download from ~800KB to ~250KB on first load,
+    # and shrinks API responses too. Skipped automatically for SSE streams
+    # (chat/stream) because Starlette's gzip middleware bypasses already-
+    # encoded responses and small payloads.
+    app.add_middleware(GZipMiddleware, minimum_size=500, compresslevel=5)
+
     # ── CORS: explicit origin whitelist; no wildcards ─────────────────
     app.add_middleware(
         CORSMiddleware,
@@ -220,7 +229,24 @@ def create_app() -> FastAPI:
     if frontend_dir.is_dir() and (frontend_dir / "index.html").exists():
         assets_dir = frontend_dir / "assets"
         if assets_dir.is_dir():
-            app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+            # Vite hashes filenames (e.g. index-a1b2c3d4.js), so a 1-year
+            # immutable cache header is safe — the URL changes when the file
+            # changes. Massive win for repeat visits (no re-download of
+            # JS/CSS bundles).
+            class _CachedStatic(StaticFiles):
+                async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+                    async def _send(message):  # type: ignore[no-untyped-def]
+                        if message["type"] == "http.response.start":
+                            headers = list(message.get("headers", []))
+                            headers.append(
+                                (b"cache-control", b"public, max-age=31536000, immutable")
+                            )
+                            message["headers"] = headers
+                        await send(message)
+
+                    await super().__call__(scope, receive, _send)
+
+            app.mount("/assets", _CachedStatic(directory=str(assets_dir)), name="assets")
 
         index_html = frontend_dir / "index.html"
 
