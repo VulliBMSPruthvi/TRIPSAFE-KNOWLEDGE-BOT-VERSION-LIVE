@@ -44,7 +44,10 @@ class Settings(BaseSettings):
 
     # ── Anthropic ───────────────────────────────────────────────
     anthropic_api_key: SecretStr = SecretStr("")
-    default_chat_model: str = "claude-haiku-4-5"
+    # Sonnet is materially better at synthesis and at not hallucinating when
+    # the retrieved context is ambiguous. Haiku stays available as a fast/
+    # cheap toggle in Admin → Integrations.
+    default_chat_model: str = "claude-sonnet-4-6"
 
     # ── Google OAuth (bootstrap — admins can override via DB) ──
     google_oauth_client_id: str = ""
