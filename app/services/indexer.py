@@ -292,8 +292,20 @@ async def run_build(
         # numbers stay tied to their plan/region/age band labels.
         all_chunks: list[tuple[str, str]] = []
         source_summary: list[dict[str, Any]] = []
+        from app.services import s3_store
+
         for f in files:
             path = Path(f.stored_path)
+            # Container restarts wipe /app/uploads. If S3 sync is enabled,
+            # transparently pull the file back from S3 before extracting.
+            if not path.exists():
+                s3_store.ensure_upload_local(path)
+            else:
+                # File exists locally but may not yet be backed up to S3
+                # (e.g. it was uploaded before the S3-uploads feature shipped).
+                # push_upload is a cheap no-op if S3 uploads is disabled, and
+                # boto3.upload_file is content-stable so re-pushes are harmless.
+                s3_store.push_upload(path)
             if not path.exists():
                 logger.warning("source_file_missing path=%s", path)
                 continue

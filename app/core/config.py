@@ -79,10 +79,15 @@ class Settings(BaseSettings):
     aws_region: str = "ap-south-1"
     aws_s3_bucket: str = ""
     aws_s3_faiss_prefix: str = "faiss/"
+    aws_s3_uploads_prefix: str = "uploads/"
     aws_secrets_manager_prefix: str = "tripsafe/prod/"
     # When true, the RAG engine syncs the FAISS index files between local
     # ephemeral storage and S3 on startup + after every rebuild.
     use_s3_for_faiss: bool = False
+    # When true, uploaded source documents are persisted to S3 on upload and
+    # fetched back to local /uploads on demand. This means container restarts
+    # no longer wipe the knowledge base.
+    use_s3_for_uploads: bool = False
 
     # ── Frontend static serving (production) ────────────────────
     frontend_dist_dir: str = "/app/frontend_dist"

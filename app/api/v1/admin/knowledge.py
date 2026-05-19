@@ -29,7 +29,7 @@ from app.schemas.admin import (
     IndexStatusResponse,
     KnowledgeFileRow,
 )
-from app.services import indexer
+from app.services import indexer, s3_store
 from app.services.activity import ActionType, log_action
 from app.services.rag import engine as rag_engine
 
@@ -110,10 +110,12 @@ async def upload_file(
         )
     )
     for old in existing_q.scalars().all():
+        old_path = Path(old.stored_path)
         try:
-            Path(old.stored_path).unlink(missing_ok=True)
+            old_path.unlink(missing_ok=True)
         except OSError:
             pass
+        s3_store.delete_upload(old_path)
         await db.delete(old)
 
     record = KnowledgeFile(
@@ -127,6 +129,9 @@ async def upload_file(
     db.add(record)
     await db.commit()
     await db.refresh(record)
+
+    # Mirror to S3 so a container restart can't lose this file.
+    s3_store.push_upload(stored_path)
 
     await log_action(
         db,
@@ -163,6 +168,7 @@ async def delete_file(
             path.unlink()
         except OSError:
             pass
+    s3_store.delete_upload(path)
 
     await db.delete(record)
     await db.commit()

@@ -45,6 +45,10 @@ class RagEngine:
         self._metadata: dict[str, list[str]] | None = None
         self._anthropic: Any | None = None
         self._loaded_at: str | None = None
+        # mtime of the .faiss file at the moment we loaded it. Used to detect
+        # that another worker (or our own indexer) wrote a newer index to disk,
+        # so /chat sees fresh data without a process restart.
+        self._index_mtime: float | None = None
 
     # ── Lazy initializers ────────────────────────────────────────────────
 
@@ -101,25 +105,47 @@ class RagEngine:
     @property
     def available(self) -> bool:
         # Multi-worker safety: under gunicorn we run >1 worker process per
-        # container. A rebuild triggered from the admin panel only mutates
-        # ONE worker's in-memory state — the other workers still see the
-        # stale (or empty) singleton. We also pull fresh index files from S3
-        # at container start, but a worker that booted before the first
-        # rebuild has no files to load.
-        # Solution: if memory is empty, try a disk reload on the fly. The
-        # rebuild path (or s3_store.pull_to_local on another worker's boot)
-        # may have written files since we last looked.
-        if self._index is None or self._metadata is None:
-            # Best-effort: try S3 pull first so workers can pick up an index
-            # rebuilt by a sibling worker that pushed to S3.
-            try:
-                from app.services import s3_store
+        # container. A rebuild only mutates ONE worker's memory; the others
+        # still see stale (or empty) singletons. Two cases to handle:
+        #
+        #   (a) In-memory is empty → pull from S3 if enabled, then load disk.
+        #   (b) In-memory is populated but a NEWER index exists on disk
+        #       (because another worker rebuilt it) → reload from disk.
+        try:
+            from app.services import s3_store
+            from app.core.config import get_settings as _gs
 
-                if s3_store.is_enabled():
-                    s3_store.pull_to_local()
-            except Exception:
-                logger.exception("s3_pull_on_demand_failed")
-            self.reload()
+            settings = _gs()
+            local_index = settings.faiss_index_path / INDEX_FILENAME
+
+            if self._index is None or self._metadata is None:
+                # Case (a): cold cache. Try S3 first so we benefit from any
+                # rebuild a sibling worker pushed up there.
+                try:
+                    if s3_store.is_enabled():
+                        s3_store.pull_to_local()
+                except Exception:
+                    logger.exception("s3_pull_on_demand_failed")
+                self.reload()
+            elif local_index.exists():
+                # Case (b): warm cache. Cheap check — if disk has a newer
+                # .faiss than what we loaded, reload. This is how the admin
+                # "Rebuild Index" propagates to all workers without a
+                # restart, even though Python singletons are per-process.
+                disk_mtime = local_index.stat().st_mtime
+                if (
+                    self._index_mtime is None
+                    or disk_mtime > self._index_mtime + 0.5  # 0.5s slack
+                ):
+                    logger.info(
+                        "faiss_disk_newer_reloading disk=%s loaded=%s",
+                        disk_mtime,
+                        self._index_mtime,
+                    )
+                    self.reload()
+        except Exception:
+            logger.exception("rag_availability_check_failed")
+
         return self._index is not None and self._metadata is not None
 
     @property
@@ -157,10 +183,20 @@ class RagEngine:
                     new_metadata = pickle.load(f)  # noqa: S301 - admin-owned file
                 self._index = new_index
                 self._metadata = new_metadata
+                # Capture mtime so subsequent `available` checks can detect
+                # a sibling worker's rebuild and reload automatically.
+                try:
+                    self._index_mtime = index_path.stat().st_mtime
+                except OSError:
+                    self._index_mtime = None
                 from datetime import datetime, timezone
 
                 self._loaded_at = datetime.now(timezone.utc).isoformat()
-                logger.info("faiss_loaded chunks=%d", self.chunk_count)
+                logger.info(
+                    "faiss_loaded chunks=%d mtime=%s",
+                    self.chunk_count,
+                    self._index_mtime,
+                )
             return True
         except Exception:
             logger.exception("faiss_load_failed")

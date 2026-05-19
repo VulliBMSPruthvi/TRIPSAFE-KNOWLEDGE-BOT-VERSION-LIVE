@@ -54,14 +54,25 @@ export function KnowledgePage() {
     return () => clearInterval(t);
   }, [builds]);
 
-  const onUpload = async (file: File) => {
+  const onUpload = async (selected: FileList | File[]) => {
     setErr(null);
     setUploading(true);
+    const files = Array.from(selected);
+    const failures: string[] = [];
     try {
-      await api.uploadFile(file);
+      // Upload sequentially so a slow connection or a server-side rebuild-
+      // semantic conflict can't fan out into a flood of parallel requests.
+      for (const file of files) {
+        try {
+          await api.uploadFile(file);
+        } catch (e) {
+          failures.push(`${file.name}: ${String(e)}`);
+        }
+      }
       await refresh();
-    } catch (e) {
-      setErr(String(e));
+      if (failures.length) {
+        setErr(`Some files failed:\n${failures.join("\n")}`);
+      }
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -142,14 +153,19 @@ export function KnowledgePage() {
                 ref={inputRef}
                 type="file"
                 accept=".docx,.csv"
+                multiple
                 className="hidden"
-                onChange={(e) => e.target.files && e.target.files[0] && onUpload(e.target.files[0])}
+                onChange={(e) => {
+                  if (e.target.files && e.target.files.length > 0) {
+                    void onUpload(e.target.files);
+                  }
+                }}
               />
               <Button
                 onClick={() => inputRef.current?.click()}
                 loading={uploading}
               >
-                Upload file
+                Upload files
               </Button>
             </>
           }
