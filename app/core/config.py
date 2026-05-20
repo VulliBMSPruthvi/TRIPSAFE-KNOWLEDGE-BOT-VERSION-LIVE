@@ -66,7 +66,11 @@ class Settings(BaseSettings):
     embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     openai_api_key: SecretStr = SecretStr("")
     openai_embedding_model: str = "text-embedding-3-small"
-    rag_top_k: int = 20
+    # K must be large enough to fit ALL plan-rows for a comparison query
+    # (e.g. "compare all 6 plans for Asia, 15-21 days, 0-40 yrs" needs 6+
+    # row chunks plus a few prose chunks). K=60 covers those cases comfortably
+    # and adds ~3K tokens to the prompt — cheap for Sonnet.
+    rag_top_k: int = 60
 
     # ── CORS ────────────────────────────────────────────────────
     cors_allowed_origins: str = "http://localhost:5173"
