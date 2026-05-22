@@ -4,6 +4,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
+from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
@@ -29,14 +31,56 @@ from app.services import settings_store
 from app.services.activity import ActionType, log_action
 from app.services.rag import engine as rag_engine
 
-# NOTE: rate limiting on this route lands in Phase D as Starlette middleware.
-# slowapi's decorator conflicts with FastAPI's Annotated-Depends signature
-# introspection (https://github.com/laurentS/slowapi/issues/...).
-
 logger = logging.getLogger("tripsafe.chat")
 router = APIRouter()
 
 HISTORY_TURNS = 20  # last N user+assistant messages forwarded as context
+
+# ── Per-user rate limiting (in-memory sliding window) ───────────────────
+# Anthropic's org-wide TPM cap is global, but we still want to prevent one
+# user from burning the whole budget. Cap each user at 10 chat msgs/minute.
+# This is per-worker-process (no Redis) — under gunicorn with 2 workers, the
+# practical cap is 20/min per user. Good enough for an internal tool.
+_USER_REQ_WINDOW: dict[str, list[float]] = defaultdict(list)
+USER_RATE_LIMIT_PER_MIN = 10
+
+
+def _check_user_rate_limit(user_id: str) -> None:
+    """Raises HTTPException 429 with a user-friendly message if exceeded."""
+    now = time.monotonic()
+    window = _USER_REQ_WINDOW[user_id]
+    # Drop entries older than 60s
+    cutoff = now - 60.0
+    while window and window[0] < cutoff:
+        window.pop(0)
+    if len(window) >= USER_RATE_LIMIT_PER_MIN:
+        oldest = window[0]
+        retry_in = max(1, int(60 - (now - oldest)))
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"You're sending messages a bit fast. Try again in "
+                f"~{retry_in}s."
+            ),
+            headers={"Retry-After": str(retry_in)},
+        )
+    window.append(now)
+
+
+def _friendly_anthropic_error(exc: Exception) -> str:
+    """Turn Anthropic SDK exceptions into something a user can read."""
+    msg = str(exc).lower()
+    if "rate_limit" in msg or "429" in msg or "too many requests" in msg:
+        return (
+            "The AI is temporarily busy answering other questions. Please "
+            "wait ~30 seconds and try again."
+        )
+    if "overloaded" in msg or "503" in msg:
+        return (
+            "The AI service is briefly overloaded. Please try again in a "
+            "few seconds."
+        )
+    return "I hit a temporary issue generating that answer. Please try again."
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are a knowledgeable TripSafe travel insurance assistant.\n\n"
@@ -136,6 +180,9 @@ async def post_chat(
             ),
         )
 
+    # Per-user throttle BEFORE we burn DB / embedding cost.
+    _check_user_rate_limit(str(current_user.id))
+
     session = await _get_or_create_session(db, current_user.id, payload.session_id)
     history = await _recent_history(db, session.id, HISTORY_TURNS)
     retrieved = rag_engine.retrieve(payload.prompt)
@@ -165,10 +212,17 @@ async def post_chat(
             user_query=payload.prompt,
             retrieved=retrieved,
         )
-    except Exception:
+    except Exception as exc:
         logger.exception("claude_call_failed user_id=%s", current_user.id)
+        msg = str(exc).lower()
+        if "rate_limit" in msg or "429" in msg or "too many requests" in msg:
+            status_code = 429
+        elif "overloaded" in msg or "503" in msg:
+            status_code = 503
+        else:
+            status_code = 502
         raise HTTPException(
-            status_code=502, detail="Upstream LLM error. Try again."
+            status_code=status_code, detail=_friendly_anthropic_error(exc)
         ) from None
 
     assistant_msg = ChatMessage(
@@ -248,6 +302,9 @@ async def post_chat_stream(
             ),
         )
 
+    # Per-user throttle BEFORE we burn DB / embedding cost.
+    _check_user_rate_limit(str(current_user.id))
+
     session = await _get_or_create_session(db, current_user.id, payload.session_id)
     history = await _recent_history(db, session.id, HISTORY_TURNS)
     retrieved = rag_engine.retrieve(payload.prompt)
@@ -288,21 +345,44 @@ async def post_chat_stream(
         queue: asyncio.Queue[str | None] = asyncio.Queue()
 
         def produce():
-            try:
-                for delta in rag_engine.stream_answer(
-                    model=model,
-                    system_prompt=system_prompt,
-                    history=history,
-                    user_query=payload.prompt,
-                    retrieved=retrieved,
-                ):
-                    loop.call_soon_threadsafe(queue.put_nowait, delta)
-            except Exception as exc:  # noqa: BLE001
-                loop.call_soon_threadsafe(
-                    queue.put_nowait, f"__ERROR__{exc!s}"
-                )
-            finally:
-                loop.call_soon_threadsafe(queue.put_nowait, None)
+            # Retry once on transient rate-limit / overload — but only if the
+            # error fires BEFORE any deltas are yielded. After the first
+            # delta has been sent to the SSE client, we can't replay.
+            import time as _time
+            attempts = 0
+            yielded_any = False
+            while True:
+                attempts += 1
+                try:
+                    for delta in rag_engine.stream_answer(
+                        model=model,
+                        system_prompt=system_prompt,
+                        history=history,
+                        user_query=payload.prompt,
+                        retrieved=retrieved,
+                    ):
+                        yielded_any = True
+                        loop.call_soon_threadsafe(queue.put_nowait, delta)
+                    break  # generator exhausted cleanly
+                except Exception as exc:  # noqa: BLE001
+                    is_transient = (
+                        "rate_limit" in str(exc).lower()
+                        or "429" in str(exc)
+                        or "overloaded" in str(exc).lower()
+                    )
+                    if is_transient and not yielded_any and attempts < 2:
+                        # One bounded retry: 8s backoff is enough for
+                        # Anthropic's per-minute TPM window to relax.
+                        logger.warning(
+                            "stream_retry user_id=%s attempt=%d", user_id, attempts
+                        )
+                        _time.sleep(8)
+                        continue
+                    loop.call_soon_threadsafe(
+                        queue.put_nowait, f"__ERROR__{exc!s}"
+                    )
+                    break
+            loop.call_soon_threadsafe(queue.put_nowait, None)
 
         producer_task = asyncio.create_task(asyncio.to_thread(produce))
 
@@ -321,7 +401,12 @@ async def post_chat_stream(
         await producer_task
 
         if error:
-            yield _sse({"type": "error", "detail": error})
+            # Translate raw SDK exception text into a user-readable line.
+            friendly = _friendly_anthropic_error(Exception(error))
+            logger.warning(
+                "stream_anthropic_error user_id=%s raw=%s", user_id, error[:300]
+            )
+            yield _sse({"type": "error", "detail": friendly})
             return
 
         full_text = "".join(collected).strip()
